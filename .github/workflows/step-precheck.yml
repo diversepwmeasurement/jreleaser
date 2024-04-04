@@ -1,33 +1,30 @@
-name: X-Precheck
-
-on:
-  workflow_call:
-    outputs:
-      version:
-        description: version
-        value: ${{ jobs.precheck.outputs.version }}
-
-permissions:
-  contents: read
-
 jobs:
   precheck:
+    if: github.repository == 'jreleaser/jreleaser' && startsWith(github.event.head_commit.message,
+      'Releasing version') != true
     name: Precheck
-    if: github.repository == 'jreleaser/jreleaser' && startsWith(github.event.head_commit.message, 'Releasing version') != true
-    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.vars.outputs.VERSION }}
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Cancel previous run
+      uses: styfle/cancel-workflow-action@0.12.1
+      with:
+        access_token: ${{ secrets.GITHUB_TOKEN }}
+    - continue-on-error: true
+      id: vars
+      name: Version
+      run: 'echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
 
-      - name: Cancel previous run
-        uses: styfle/cancel-workflow-action@0.12.1
-        with:
-          access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Version
-        id: vars
-        shell: bash
-        run: |
-          echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
+        '
+      shell: bash
+name: X-Precheck
+on:
+  repository_dispatch:
+    types: trigger-ga___step-precheck.yml
+permissions:
+  contents: read

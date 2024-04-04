@@ -1,116 +1,119 @@
-name: X-Jlink
-
-on:
-  workflow_call:
-    inputs:
-      project-version:
-        required: true
-        type: string
-    secrets:
-      gpg-passphrase:
-        required: true
-      oci-compartment-id:
-        required: true
-
-permissions:
-  contents: read
-
 jobs:
   jlink:
-    name: Jlink
-    runs-on: ubuntu-latest
     env:
       CI: true
+    name: Jlink
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: main
+    - continue-on-error: true
+      env:
+        GPG_PASSPHRASE: ${{ secrets.gpg-passphrase }}
+      name: Decrypt secrets
+      run: sh .github/scripts/decrypt-secrets.sh
+      shell: bash
+    - continue-on-error: true
+      name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        cache: gradle
+        distribution: ${{ vars.JAVA_DISTRO }}
+        java-version: ${{ vars.JAVA_VERSION }}
+    - continue-on-error: true
+      if: endsWith(${{ inputs.project-version }}, '-SNAPSHOT') != true
+      name: Version
+      run: 'echo ${{ inputs.project-version }} > VERSION
 
-      - name: Decrypt secrets
-        shell: bash
-        run: sh .github/scripts/decrypt-secrets.sh
-        env:
-          GPG_PASSPHRASE: ${{ secrets.gpg-passphrase }}
+        '
+    - continue-on-error: true
+      env:
+        JRELEASER_OCI_COMPARTMENTID: ${{ secrets.oci-compartment-id }}
+      name: Build
+      run: ./gradlew -Prelease=true -PreproducibleBuild=true build -S
+    - continue-on-error: true
+      env:
+        JRELEASER_PROJECT_VERSION: ${{ inputs.project-version }}
+      name: Java Archive
+      uses: jreleaser/release-action@v2
+      with:
+        arguments: assemble --assembler java-archive
+        setup-java: false
+        version: early-access
+    - continue-on-error: true
+      env:
+        JRELEASER_PROJECT_VERSION: ${{ inputs.project-version }}
+      name: Jlink
+      uses: jreleaser/release-action@v2
+      with:
+        arguments: assemble --assembler jlink
+        setup-java: false
+        version: early-access
+    - continue-on-error: true
+      if: always()
+      name: JReleaser output
+      uses: actions/upload-artifact@v4
+      with:
+        name: jreleaser-jlink
+        path: 'out/jreleaser/trace.log
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ vars.JAVA_VERSION }}
-          distribution: ${{ vars.JAVA_DISTRO }}
-          cache: gradle
+          out/jreleaser/output.properties
 
-      - name: Version
-        if: endsWith(${{ inputs.project-version }}, '-SNAPSHOT') != true
-        run: |
-          echo ${{ inputs.project-version }} > VERSION
+          '
+    - continue-on-error: true
+      name: Dependencies
+      run: 'ls -l plugins/jreleaser/build/dependencies/flat
 
-      - name: Build
-        run: ./gradlew -Prelease=true -PreproducibleBuild=true build -S
-        env:
-          JRELEASER_OCI_COMPARTMENTID: ${{ secrets.oci-compartment-id }}
+        ls -l plugins/jreleaser/build/dependencies/graalvm
 
-      - name: Java Archive
-        uses: jreleaser/release-action@v2
-        with:
-          version: early-access
-          arguments: assemble --assembler java-archive
-          setup-java: false
-        env:
-          JRELEASER_PROJECT_VERSION: ${{ inputs.project-version }}
+        '
+    - continue-on-error: true
+      name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: artifacts
+        path: 'plugins/jreleaser/build/libs/
 
-      - name: Jlink
-        uses: jreleaser/release-action@v2
-        with:
-          version: early-access
-          arguments: assemble --assembler jlink
-          setup-java: false
-        env:
-          JRELEASER_PROJECT_VERSION: ${{ inputs.project-version }}
+          plugins/jreleaser/build/dependencies/
 
-      - name: JReleaser output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jreleaser-jlink
-          path: |
-            out/jreleaser/trace.log
-            out/jreleaser/output.properties
+          plugins/jreleaser/build/distributions/
 
-      - name: Dependencies
-        run: |
-          ls -l plugins/jreleaser/build/dependencies/flat
-          ls -l plugins/jreleaser/build/dependencies/graalvm
+          plugins/jreleaser-tool-provider/build/libs/*.jar
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 1
-          name: artifacts
-          path: |
-            plugins/jreleaser/build/libs/
-            plugins/jreleaser/build/dependencies/
-            plugins/jreleaser/build/distributions/
-            plugins/jreleaser-tool-provider/build/libs/*.jar
-            plugins/jreleaser-ant-tasks/build/distributions/*.zip
+          plugins/jreleaser-ant-tasks/build/distributions/*.zip
 
-      - name: Stop Gradle daemon
-        shell: bash
-        run: ./gradlew -stop
+          '
+        retention-days: 1
+    - continue-on-error: true
+      name: Stop Gradle daemon
+      run: ./gradlew -stop
+      shell: bash
+    - continue-on-error: true
+      name: Upload java-archive
+      uses: actions/upload-artifact@v4
+      with:
+        name: java-archive
+        path: 'out/jreleaser/assemble/jreleaser/java-archive/*.zip
 
-      - name: Upload java-archive
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 1
-          name: java-archive
-          path: |
-            out/jreleaser/assemble/jreleaser/java-archive/*.zip
-            out/jreleaser/assemble/jreleaser/java-archive/*.tar
+          out/jreleaser/assemble/jreleaser/java-archive/*.tar
 
-      - name: Upload jlink
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 1
-          name: jlink
-          path: |
-            out/jreleaser/assemble/jreleaser-standalone/jlink/*.zip
+          '
+        retention-days: 1
+    - continue-on-error: true
+      name: Upload jlink
+      uses: actions/upload-artifact@v4
+      with:
+        name: jlink
+        path: 'out/jreleaser/assemble/jreleaser-standalone/jlink/*.zip
+
+          '
+        retention-days: 1
+name: X-Jlink
+on:
+  repository_dispatch:
+    types: trigger-ga___step-jlink.yml
+permissions:
+  contents: read

@@ -1,14 +1,12 @@
-name: Clear cache
-
-on:
-  schedule:
-    - cron: '0 3 * * *'
-  workflow_dispatch:
-
 jobs:
   clear:
     name: Delete all caches
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Clear caches
-        uses: easimon/wipe-cache@v2
+    - continue-on-error: true
+      name: Clear caches
+      uses: easimon/wipe-cache@v2
+name: Clear cache
+on:
+  repository_dispatch:
+    types: trigger-ga___cache.yml

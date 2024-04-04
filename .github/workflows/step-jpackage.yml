@@ -1,108 +1,115 @@
-name: X-JPackage
-
-on:
-  workflow_call:
-    inputs:
-      project-version:
-        required: true
-        type: string
-      project-effective-version:
-        required: true
-        type: string
-
-permissions:
-  contents: read
-
 jobs:
   jpackage:
-    name: '${{ matrix.job.os }}'
+    name: ${{ matrix.job.os }}
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: main
+    - continue-on-error: true
+      name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: artifacts
+        path: plugins
+    - continue-on-error: true
+      name: Download jlink
+      uses: actions/download-artifact@v4
+      with:
+        name: jlink
+        path: out/jreleaser/assemble/jreleaser-standalone/jlink
+    - continue-on-error: true
+      name: Expand jlink
+      run: 'cd out/jreleaser/assemble/jreleaser-standalone/jlink
+
+        ls -l
+
+        unzip -q -d work-${{ matrix.job.platform }} jreleaser-standalone-${{ inputs.project-effective-version
+        }}-${{ matrix.job.platform }}.zip
+
+        '
+      shell: bash
+    - continue-on-error: true
+      name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        cache: gradle
+        distribution: ${{ vars.JAVA_DISTRO }}
+        java-version: ${{ vars.JAVA_VERSION }}
+    - continue-on-error: true
+      if: endsWith(${{ inputs.project-version }}, '-SNAPSHOT') != true
+      name: Version
+      run: 'echo ${{ inputs.project-version }} > VERSION
+
+        '
+    - continue-on-error: true
+      name: Jdks
+      run: ./gradlew :jreleaser:copyJdksFromCache :jreleaser:setupJdks
+      shell: bash
+    - continue-on-error: true
+      if: runner.os == 'Windows'
+      name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v2
+    - continue-on-error: true
+      if: runner.os == 'Windows'
+      name: Install WiX
+      run: dotnet tool install --global wix
+    - continue-on-error: true
+      env:
+        JRELEASER_PROJECT_VERSION: ${{ inputs.project-version }}
+      name: Jpackage
+      uses: jreleaser/release-action@v2
+      with:
+        arguments: assemble --assembler jpackage --select-current-platform
+        setup-java: false
+        version: early-access
+    - continue-on-error: true
+      if: always()
+      name: JReleaser output
+      uses: actions/upload-artifact@v4
+      with:
+        name: jreleaser-jpackage-${{ runner.os }}-${{ runner.arch }}
+        path: 'out/jreleaser/trace.log
+
+          out/jreleaser/output.properties
+
+          '
+    - continue-on-error: true
+      name: Stop Gradle daemon
+      run: ./gradlew -stop
+      shell: bash
+    - continue-on-error: true
+      name: Upload jpackage
+      uses: actions/upload-artifact@v4
+      with:
+        name: jpackage-${{ runner.os }}-${{ runner.arch }}
+        path: 'out/jreleaser/assemble/jreleaser-installer/jpackage/*.pkg
+
+          out/jreleaser/assemble/jreleaser-installer/jpackage/*.msi
+
+          out/jreleaser/assemble/jreleaser-installer/jpackage/*.exe
+
+          out/jreleaser/assemble/jreleaser-installer/jpackage/*.deb
+
+          out/jreleaser/assemble/jreleaser-installer/jpackage/*.rpm
+
+          '
+        retention-days: 1
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest,  platform: linux-x86_64 }
-          - { os: macOS-latest,   platform: osx-x86_64 }
-          - { os: windows-latest, platform: windows-x86_64 }
-    runs-on: ${{ matrix.job.os }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts
-          path: plugins
-
-      - name: Download jlink
-        uses: actions/download-artifact@v4
-        with:
-          name: jlink
-          path: out/jreleaser/assemble/jreleaser-standalone/jlink
-
-      - name: Expand jlink
-        shell: bash
-        run: |
-          cd out/jreleaser/assemble/jreleaser-standalone/jlink
-          ls -l
-          unzip -q -d work-${{ matrix.job.platform }} jreleaser-standalone-${{ inputs.project-effective-version }}-${{ matrix.job.platform }}.zip
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ vars.JAVA_VERSION }}
-          distribution: ${{ vars.JAVA_DISTRO }}
-          cache: gradle
-
-      - name: Version
-        if: endsWith(${{ inputs.project-version }}, '-SNAPSHOT') != true
-        run: |
-          echo ${{ inputs.project-version }} > VERSION
-
-      - name: Jdks
-        shell: bash
-        run: ./gradlew :jreleaser:copyJdksFromCache :jreleaser:setupJdks
-
-      - name: Add msbuild to PATH
-        if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Install WiX
-        if: runner.os == 'Windows'
-        run: dotnet tool install --global wix
-
-      - name: Jpackage
-        uses: jreleaser/release-action@v2
-        with:
-          version: early-access
-          arguments: assemble --assembler jpackage --select-current-platform
-          setup-java: false
-        env:
-          JRELEASER_PROJECT_VERSION: ${{ inputs.project-version }}
-
-      - name: JReleaser output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jreleaser-jpackage-${{ runner.os }}-${{ runner.arch }}
-          path: |
-            out/jreleaser/trace.log
-            out/jreleaser/output.properties
-
-      - name: Stop Gradle daemon
-        shell: bash
-        run: ./gradlew -stop
-
-      - name: Upload jpackage
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 1
-          name: jpackage-${{ runner.os }}-${{ runner.arch }}
-          path: |
-            out/jreleaser/assemble/jreleaser-installer/jpackage/*.pkg
-            out/jreleaser/assemble/jreleaser-installer/jpackage/*.msi
-            out/jreleaser/assemble/jreleaser-installer/jpackage/*.exe
-            out/jreleaser/assemble/jreleaser-installer/jpackage/*.deb
-            out/jreleaser/assemble/jreleaser-installer/jpackage/*.rpm
+        - os: ubuntu-latest
+          platform: linux-x86_64
+        - os: macOS-latest
+          platform: osx-x86_64
+        - os: windows-latest
+          platform: windows-x86_64
+name: X-JPackage
+on:
+  repository_dispatch:
+    types: trigger-ga___step-jpackage.yml
+permissions:
+  contents: read

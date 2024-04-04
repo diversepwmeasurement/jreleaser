@@ -1,48 +1,45 @@
-name: Frogbot
-
-on:
-  push:
-    branches: [ main ]
-
 env:
   CI: true
-
-permissions:
-  contents: write
-  actions: write
-  pull-requests: write
-  security-events: write
-
 jobs:
+  frogbot:
+    if: endsWith(${{ needs.precheck.outputs.version }}, '-SNAPSHOT')
+    name: Frogbot
+    needs:
+    - precheck
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      env:
+        GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      name: Decrypt secrets
+      run: sh .github/scripts/decrypt-secrets.sh
+      shell: bash
+    - continue-on-error: true
+      name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        cache: gradle
+        distribution: ${{ vars.JAVA_DISTRO }}
+        java-version: ${{ vars.JAVA_VERSION }}
+    - continue-on-error: true
+      env:
+        JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+        JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        JF_URL: ${{ secrets.JFROG_PLATFORM_URL }}
+        JRELEASER_OCI_COMPARTMENTID: ${{ secrets.JRELEASER_OCI_COMPARTMENTID }}
+      uses: jfrog/frogbot@5d0e9daa940c15717f1258ada5d841dace6ed538
   precheck:
     name: Precheck
-    uses: jreleaser/jreleaser/.github/workflows/step-precheck.yml@main
     secrets: inherit
-
-  frogbot:
-    name: Frogbot
-    needs: [precheck]
-    if: endsWith(${{ needs.precheck.outputs.version }}, '-SNAPSHOT')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Decrypt secrets
-        shell: bash
-        run: sh .github/scripts/decrypt-secrets.sh
-        env:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ vars.JAVA_VERSION }}
-          distribution: ${{ vars.JAVA_DISTRO }}
-          cache: gradle
-
-      - uses: jfrog/frogbot@5d0e9daa940c15717f1258ada5d841dace6ed538
-        env:
-          JF_URL: ${{ secrets.JFROG_PLATFORM_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
-          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          JRELEASER_OCI_COMPARTMENTID: ${{ secrets.JRELEASER_OCI_COMPARTMENTID }}
+    uses: jreleaser/jreleaser/.github/workflows/step-precheck.yml@main
+name: Frogbot
+on:
+  repository_dispatch:
+    types: trigger-ga___frogbot.yml
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  security-events: write

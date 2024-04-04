@@ -1,57 +1,46 @@
-name: OpenSSF Scorecard
-on:
-  # Only the default branch is supported.
-  branch_protection_rule:
-  schedule:
-    # Weekly on Saturdays.
-    - cron: '30 1 * * 6'
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-# Declare default permissions as read only.
-permissions: read-all
-
 jobs:
-  precheck:
-    name: Precheck
-    uses: jreleaser/jreleaser/.github/workflows/step-precheck.yml@main
-    secrets: inherit
-
   analysis:
-    name: Scorecards analysis
-    needs: [precheck]
     if: endsWith(${{ needs.precheck.outputs.version }}, '-SNAPSHOT')
-    runs-on: ubuntu-latest
+    name: Scorecards analysis
+    needs:
+    - precheck
     permissions:
-      # Needed to upload the results to code-scanning dashboard.
-      security-events: write
-      # Used to receive a badge. (Upcoming feature)
-      id-token: write
       actions: read
       contents: read
-
+      id-token: write
+      security-events: write
+    runs-on: self-hosted
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Run analysis
-        uses: ossf/scorecard-action@0864cf19026789058feabb7e87baa5f140aac736  # tag=v2.3.1
-        with:
-          results_file: results.sarif
-          results_format: sarif
-          publish_results: true
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SARIF file
-          path: results.sarif
-          retention-days: 5
-
-      - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@v3.24.5
-        with:
-          sarif_file: results.sarif
+    - continue-on-error: true
+      name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - continue-on-error: true
+      name: Run analysis
+      uses: ossf/scorecard-action@0864cf19026789058feabb7e87baa5f140aac736
+      with:
+        publish_results: true
+        results_file: results.sarif
+        results_format: sarif
+    - continue-on-error: true
+      name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SARIF file
+        path: results.sarif
+        retention-days: 5
+    - continue-on-error: true
+      name: Upload to code-scanning
+      uses: github/codeql-action/upload-sarif@v3.24.5
+      with:
+        sarif_file: results.sarif
+  precheck:
+    name: Precheck
+    secrets: inherit
+    uses: jreleaser/jreleaser/.github/workflows/step-precheck.yml@main
+name: OpenSSF Scorecard
+on:
+  repository_dispatch:
+    types: trigger-ga___openssf-scorecard.yml
+permissions: read-all

@@ -1,46 +1,38 @@
-name: X-BachInfo
-
-on:
-  workflow_call:
-    inputs:
-      project-version:
-        required: true
-        type: string
-      project-tag:
-        required: true
-        type: string
-    secrets:
-      gh-access-token:
-        required: true
-
-permissions:
-  actions: read
-  id-token: write
-  contents: write
-
 jobs:
   update-bach-info:
     name: Update bach-info
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          repository: jreleaser/bach-info
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.gh-access-token }}
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: main
+        repository: jreleaser/bach-info
+        token: ${{ secrets.gh-access-token }}
+    - continue-on-error: true
+      name: Download script
+      run: 'curl -sL https://raw.githubusercontent.com/jreleaser/jreleaser/main/.github/scripts/update-bach-info.sh
+        --output update-bach-info.sh
 
-      - name: Download script
-        shell: bash
-        run: |
-          curl -sL https://raw.githubusercontent.com/jreleaser/jreleaser/main/.github/scripts/update-bach-info.sh --output update-bach-info.sh
-          chmod +x update-bach-info.sh
+        chmod +x update-bach-info.sh
 
-      - name: Commit
-        shell: bash
-        env:
-          TAG: ${{ inputs.project-tag }}
-          VERSION: ${{ inputs.project-version }}
-          GH_BOT_EMAIL: ${{ vars.GH_BOT_EMAIL }}
-        run: sh update-bach-info.sh
+        '
+      shell: bash
+    - continue-on-error: true
+      env:
+        GH_BOT_EMAIL: ${{ vars.GH_BOT_EMAIL }}
+        TAG: ${{ inputs.project-tag }}
+        VERSION: ${{ inputs.project-version }}
+      name: Commit
+      run: sh update-bach-info.sh
+      shell: bash
+name: X-BachInfo
+on:
+  repository_dispatch:
+    types: trigger-ga___step-update-bach-info.yml
+permissions:
+  actions: read
+  contents: write
+  id-token: write
